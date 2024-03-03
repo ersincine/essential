@@ -1,9 +1,8 @@
 import os
-from pathlib import Path
 import shutil
-import numpy as np
-from regex import P
+from pathlib import Path
 
+import numpy as np
 import torch
 from kornia.geometry.conversions import (matrix4x4_to_Rt,
                                          rotation_matrix_to_quaternion)
@@ -15,7 +14,7 @@ def create_tanks_and_temples_datasets(n=10, input_dir='sources/tanks-and-temples
     input_dir = Path(input_dir)
     main_output_dir = Path(output_main_dir)
 
-    def read_matrix4x4(log_path: str, img_no: int) -> torch.Tensor:
+    def read_matrix4x4(log_path: Path, img_no: int) -> torch.Tensor:
         # Important: Image numbers start from 1. But image indices start from 0.
         assert img_no >= 1
         img_idx = img_no - 1
