@@ -1,0 +1,8 @@
+Intrinsics are below:
+fx = 1152.0
+fy = 1152.0
+cx = 960.0
+cy = 540.0
+
+These values are obtained using COLMAP on Barn.
+They are compatible with the approximate parameters given on the official website.
