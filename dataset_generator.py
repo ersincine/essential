@@ -7,7 +7,6 @@ import torch
 from kornia.geometry.conversions import (matrix4x4_to_Rt,
                                          rotation_matrix_to_quaternion)
 from kornia.geometry.epipolar import relative_camera_motion
-from regex import R
 
 
 def angle_between_quaternions(q1: np.ndarray, q2: np.ndarray, eps: float=1e-15) -> float:
@@ -122,11 +121,13 @@ def _create_tanks_and_temples_datasets_for_img_pairs(input_dir: Path, main_outpu
         shutil.copy2(k_path, output_dir / 'K.txt')
 
 
-def create_tanks_and_temples_datasets_uniformly(n=10, input_dir='sources/tanks-and-temples', output_main_dir='datasets/tanks-and-temples'):
+def create_tanks_and_temples_datasets_uniformly(n=10, selected_scenes=None, input_dir='sources/tanks-and-temples', output_main_dir='datasets/tanks-and-temples'):
     input_dir = Path(input_dir)
     main_output_dir = Path(output_main_dir)
 
     scenes = [scene for scene in os.listdir(input_dir) if os.path.isdir(input_dir / scene)]
+    if selected_scenes is not None:
+        scenes = [scene for scene in scenes if scene in selected_scenes]
     img_pairs = []
     for scene in scenes:
         img_count = len(os.listdir(input_dir / scene))
@@ -141,7 +142,7 @@ def create_tanks_and_temples_datasets_uniformly(n=10, input_dir='sources/tanks-a
     _create_tanks_and_temples_datasets_for_img_pairs(input_dir, main_output_dir, img_pairs, '')
 
 
-def create_tanks_and_temples_datasets_with_controls(n=10, min_angle_orientation=5, max_angle_orientation=20,
+def create_tanks_and_temples_datasets_with_controls(n=10, selected_scenes=None, min_angle_orientation=5, max_angle_orientation=20, min_norm_translation=0.5, max_norm_translation=float('inf'),
                                                 input_dir='sources/tanks-and-temples', output_main_dir='datasets/tanks-and-temples'):    
     
     # FIXME TODO Translationlarda açı belirleyemiyoruz. Nasıl olur bilmiyorum. Şimdi hep 90 geliyor.
@@ -150,16 +151,19 @@ def create_tanks_and_temples_datasets_with_controls(n=10, min_angle_orientation=
     main_output_dir = Path(output_main_dir)
 
     def conditions_hold(scene, img0_no, img1_no):
-        q, _ = _extract_pose(input_dir, scene, img0_no, img1_no)
+        q, t = _extract_pose(input_dir, scene, img0_no, img1_no)
         q = q.numpy()
+        t = t.numpy()
 
         reference_quaternion = np.array([1.0, 0.0, 0.0, 0.0])  # (0, 0, 0) as axis-angle 
         angle_orientation = angle_between_quaternions(q, reference_quaternion)
         angle_orientation = np.degrees(angle_orientation)
 
-        return min_angle_orientation <= angle_orientation <= max_angle_orientation
+        return min_angle_orientation <= angle_orientation <= max_angle_orientation and min_norm_translation <= np.linalg.norm(t) <= max_norm_translation
 
     scenes = [scene for scene in os.listdir(input_dir) if os.path.isdir(input_dir / scene)]
+    if selected_scenes is not None:
+        scenes = [scene for scene in scenes if scene in selected_scenes]
     img_pairs = []
     for scene in scenes:
         img_count = len(os.listdir(input_dir / scene))
@@ -173,8 +177,22 @@ def create_tanks_and_temples_datasets_with_controls(n=10, min_angle_orientation=
                 if conditions_hold(scene, img0_no, img1_no):
                     img_pairs.append((scene, img0_no, img1_no))
 
-    _create_tanks_and_temples_datasets_for_img_pairs(input_dir, main_output_dir, img_pairs, f' {min_angle_orientation}-{max_angle_orientation}')
+    _create_tanks_and_temples_datasets_for_img_pairs(input_dir, main_output_dir, img_pairs, f' {n} {min_angle_orientation}-{max_angle_orientation} {min_norm_translation}-{max_norm_translation}')
 
+
+def copy_manually_created_datasets(source_dir='sources', destination_dir='datasets'):
+    # Copy everything from sources/manually-created-datasets to datasets
+    source_dir = Path(source_dir)
+    input_dir = source_dir / 'manually-created-datasets'
+    main_output_dir = Path(destination_dir)
+    # copy dirs inside input_dir
+    for dataset in os.listdir(input_dir):
+        dataset_path = input_dir / dataset
+        if os.path.isdir(dataset_path):
+            output_dir = main_output_dir / dataset
+            if os.path.exists(output_dir):
+                shutil.rmtree(output_dir)
+            shutil.copytree(dataset_path, output_dir)
 
 if __name__ == '__main__':
     #create_tanks_and_temples_datasets_uniformly(n=10)
@@ -184,4 +202,3 @@ if __name__ == '__main__':
     t1 = np.array([1.0, 0, 0])
     t2 = np.array([0.0, 1.0, 0])
     print(np.degrees(angle_between_vectors(t1, t2)))
-
