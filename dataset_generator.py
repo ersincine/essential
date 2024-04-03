@@ -4,41 +4,9 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from kornia.geometry.conversions import (matrix4x4_to_Rt,
-                                         rotation_matrix_to_quaternion)
-from kornia.geometry.epipolar import relative_camera_motion
+from kornia.geometry import conversions
 
-
-def angle_between_quaternions(q1: np.ndarray, q2: np.ndarray, eps: float=1e-15) -> float:
-    assert isinstance(q1, np.ndarray)
-    assert isinstance(q2, np.ndarray)
-    assert len(q1.shape) == 1 and q1.shape[0] == 4
-    assert len(q2.shape) == 1 and q2.shape[0] == 4
-    
-    """
-    q1 = q1 / np.linalg.norm(q1)
-    q2 = q2 / np.linalg.norm(q2)
-    return 2 * np.arccos(np.abs(np.dot(q1, q2)))  # ?
-    """
-    
-    q1 = q1 / (np.linalg.norm(q1) + eps)
-    q2 = q2 / (np.linalg.norm(q2) + eps)
-    loss_q = np.maximum(eps, (1.0 - np.sum(q1 * q2)**2))
-    return np.arccos(1 - 2 * loss_q)
-
-
-def angle_between_vectors(v1: np.ndarray, v2: np.ndarray, eps: float=1e-15) -> float:
-    # We use this function for translation vectors.
-    assert isinstance(v1, np.ndarray)
-    assert isinstance(v2, np.ndarray)
-    assert len(v1.shape) == 1
-    assert len(v2.shape) == 1
-    assert v1.shape == v2.shape
-    
-    v1 = v1 / (np.linalg.norm(v1) + eps)
-    v2 = v2 / (np.linalg.norm(v2) + eps)
-    loss_t = np.maximum(eps, (1.0 - np.sum(v1 * v2)**2))
-    return np.arccos(np.sqrt(1 - loss_t))
+from utils.vision.opencv import epipolar_geometry
 
 
 def _read_matrix4x4(log_path: Path, img_no: int) -> torch.Tensor:
@@ -60,25 +28,6 @@ def _read_matrix4x4(log_path: Path, img_no: int) -> torch.Tensor:
     return matrix
 
 
-def _get_relative_camera_motion_from_matrix4x4(matrix1: torch.Tensor, matrix2: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    assert matrix1.shape == (4, 4)
-    assert matrix2.shape == (4, 4)
-
-    matrix1 = matrix1.reshape(1, 4, 4)
-    matrix2 = matrix2.reshape(1, 4, 4)
-
-    R1, t1 = matrix4x4_to_Rt(matrix1)
-    R2, t2 = matrix4x4_to_Rt(matrix2)
-
-    assert R1.shape == (1, 3, 3)
-    assert t1.shape == (1, 3, 1)
-    assert R2.shape == (1, 3, 3)
-    assert t2.shape == (1, 3, 1)
-
-    R, t = relative_camera_motion(R1, t1, R2, t2)
-    return R, t
-
-
 def _extract_pose(input_dir: Path, scene: str, img1_no: int, img2_no: int) -> tuple[torch.Tensor, torch.Tensor]:
     assert img1_no >= 1
     assert img2_no >= 1
@@ -86,9 +35,9 @@ def _extract_pose(input_dir: Path, scene: str, img1_no: int, img2_no: int) -> tu
     
     matrix1 = _read_matrix4x4(input_dir / f'{scene}_COLMAP_SfM.log', img1_no)
     matrix2 = _read_matrix4x4(input_dir / f'{scene}_COLMAP_SfM.log', img2_no)
-    R, t = _get_relative_camera_motion_from_matrix4x4(matrix1, matrix2)
+    R, t = epipolar_geometry.get_relative_camera_motion_from_matrix4x4(matrix1, matrix2)
 
-    q = rotation_matrix_to_quaternion(R)
+    q = conversions.rotation_matrix_to_quaternion(R)
 
     t = t.reshape(3)
     q = q.reshape(4)
@@ -156,7 +105,7 @@ def create_tanks_and_temples_datasets_with_controls(n=10, selected_scenes=None, 
         t = t.numpy()
 
         reference_quaternion = np.array([1.0, 0.0, 0.0, 0.0])  # (0, 0, 0) as axis-angle 
-        angle_orientation = angle_between_quaternions(q, reference_quaternion)
+        angle_orientation = epipolar_geometry.angle_between_quaternions(q, reference_quaternion)
         angle_orientation = np.degrees(angle_orientation)
 
         return min_angle_orientation <= angle_orientation <= max_angle_orientation and min_norm_translation <= np.linalg.norm(t) <= max_norm_translation
@@ -197,8 +146,4 @@ def copy_manually_created_datasets(source_dir='sources', destination_dir='datase
 if __name__ == '__main__':
     #create_tanks_and_temples_datasets_uniformly(n=10)
     #create_tanks_and_temples_datasets_with_controls(n=10, min_angle_orientation=5, max_angle_orientation=20, min_angle_translation=5, max_angle_translation=20)
-
-    # identity translation
-    t1 = np.array([1.0, 0, 0])
-    t2 = np.array([0.0, 1.0, 0])
-    print(np.degrees(angle_between_vectors(t1, t2)))
+    pass
